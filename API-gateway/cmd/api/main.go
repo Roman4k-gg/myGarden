@@ -44,6 +44,20 @@ func main() {
 
 			c.JSON(http.StatusOK, resp)
 		})
+
+		api.POST("/login", func(c *gin.Context) {
+			req := &userv1.LoginRequest{
+				Email: "test@example.com",
+				Password: "password123",
+			}
+
+			resp, err := userClient.Login(c.Request.Context(), req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, resp)
+		})
 	}
 
 	log.Println("API Gateway запущен на порту :3000")

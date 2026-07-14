@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mygarden-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mygarden_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mygarden_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate
+    volumes:
+      - ./user-Service/migrations:/migrations
+    command:
+      - -path=/migrations
+      - -database=postgres://user:password@postgres:5432/mygarden_db?sslmode=disable
+      - up
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
