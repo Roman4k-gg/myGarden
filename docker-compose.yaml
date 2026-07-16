@@ -31,5 +31,12 @@ services:
       postgres:
         condition: service_healthy
 
+  redis:
+    image: redis:8-alpine
+    container_name: mygarden-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
 volumes:
   pgdata:

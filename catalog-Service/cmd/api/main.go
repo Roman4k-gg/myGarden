@@ -52,7 +52,7 @@ func main() {
 	ctx := context.Background()
 	
 	connStr := "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
-	db, err := storage.NewStorage(ctx, connStr)
+	db, err := storage.NewStorage(ctx, connStr, "localhost:6379")
 	if err != nil {
 		log.Fatalf("failed to connect to db: %v", err)
 	}

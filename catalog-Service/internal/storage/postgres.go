@@ -2,18 +2,22 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	catalogv1 "github.com/roman4k-gg/myGarden/pkg/catalog_v1"
 )
 
 type Storage struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	rdb *redis.Client
 }
 
-func NewStorage(ctx context.Context, connString string) (*Storage, error) {
+func NewStorage(ctx context.Context, connString, redisAddr string) (*Storage, error) {
 	db, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
@@ -23,11 +27,20 @@ func NewStorage(ctx context.Context, connString string) (*Storage, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	log.Println("Catalog Service DB connected")
-	return &Storage{db: db}, nil
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("unable to connect to redis: %w", err)
+	}
+
+	log.Println("Catalog Service DB & Redis connected")
+	return &Storage{db: db, rdb: rdb}, nil
 }
 
 func (s *Storage) Close() {
+	s.rdb.Close()
 	s.db.Close()
 }
 
@@ -42,6 +55,17 @@ func (s *Storage) GetPlant(ctx context.Context, plantID int32) (*catalogv1.Plant
 }
 
 func (s *Storage) ListPlants(ctx context.Context) ([]*catalogv1.Plant, error) {
+	cacheKey := "catalog:plants:all"
+
+	val, err := s.rdb.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var plants []*catalogv1.Plant
+		if err := json.Unmarshal([]byte(val), &plants); err == nil {
+			log.Println("Plants loaded from Redis cache")
+			return plants, nil
+		}
+	}
+
 	query := `SELECT id, name, description, watering_interval_days FROM plants`
 	rows, err := s.db.Query(ctx, query)
 	if err != nil {
@@ -58,6 +82,14 @@ func (s *Storage) ListPlants(ctx context.Context) ([]*catalogv1.Plant, error) {
 		}
 		plants = append(plants, p)
 	}
+
+	if len(plants) > 0 {
+		if data, err := json.Marshal(plants); err == nil {
+			s.rdb.Set(ctx, cacheKey, data, 10*time.Minute)
+		}
+	}
+
+	log.Println("Plants loaded from Postgres")
 	return plants, nil
 }
 
