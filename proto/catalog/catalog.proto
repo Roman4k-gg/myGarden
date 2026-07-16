@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package catalog.v1;
+
+option go_package = "github.com/roman4k-gg/myGarden/pkg/catalog_v1;catalog_v1";
+
+service CatalogService {
+  rpc GetPlant(GetPlantRequest) returns (GetPlantResponse);
+  rpc ListPlants(ListPlantsRequest) returns (ListPlantsResponse);
+  
+  rpc AddFavorite(AddFavoriteRequest) returns (AddFavoriteResponse);
+  rpc GetFavorites(GetFavoritesRequest) returns (GetFavoritesResponse);
+}
+
+message Plant {
+  int32 id = 1;
+  string name = 2;
+  string description = 3;
+  int32 watering_interval_days = 4; 
+}
+
+message GetPlantRequest {
+  int32 plant_id = 1;
+}
+
+message GetPlantResponse {
+  Plant plant = 1;
+}
+
+message ListPlantsRequest {}
+
+message ListPlantsResponse {
+  repeated Plant plants = 1;
+}
+
+message AddFavoriteRequest {
+  int32 user_id = 1;
+  int32 plant_id = 2;
+}
+
+message AddFavoriteResponse {
+  bool success = 1;
+}
+
+message GetFavoritesRequest {
+  int32 user_id = 1;
+}
+
+message GetFavoritesResponse {
+  repeated Plant favorites = 1;
+}

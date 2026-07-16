@@ -1,7 +1,9 @@
 go 1.25.0
 
 use (
-	./API-gateway
-	./pkg/user_v1
-	./user-Service
+    ./API-gateway
+    ./pkg/user_v1
+    ./user-Service
+    ./pkg/catalog_v1
+    ./catalog-Service
 )
