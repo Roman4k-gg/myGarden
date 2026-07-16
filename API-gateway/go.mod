@@ -6,6 +6,7 @@ replace github.com/roman4k-gg/myGarden/pkg/user_v1 => ../pkg/user_v1
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/roman4k-gg/myGarden/pkg/catalog_v1 v0.0.0-00010101000000-000000000000
 	github.com/roman4k-gg/myGarden/pkg/user_v1 v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.82.0
 )

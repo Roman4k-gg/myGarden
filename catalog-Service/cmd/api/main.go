@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
+	"os"
 
+	"github.com/segmentio/kafka-go"
 	"google.golang.org/grpc"
 
 	catalogv1 "github.com/roman4k-gg/myGarden/pkg/catalog_v1"
@@ -14,6 +17,7 @@ import (
 type server struct {
 	catalogv1.UnimplementedCatalogServiceServer
 	db *storage.Storage
+	kafkaWriter *kafka.Writer
 }
 
 func (s *server) GetPlant(ctx context.Context, req *catalogv1.GetPlantRequest) (*catalogv1.GetPlantResponse, error) {
@@ -37,6 +41,13 @@ func (s *server) AddFavorite(ctx context.Context, req *catalogv1.AddFavoriteRequ
 	if err != nil {
 		return nil, err
 	}
+
+	msgStr := fmt.Sprintf("User %d added plant %d to favorites!", req.UserId, req.PlantId)
+	s.kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Key:   []byte("favorite_added"),
+		Value: []byte(msgStr),
+	})
+
 	return &catalogv1.AddFavoriteResponse{Success: true}, nil
 }
 
@@ -51,8 +62,17 @@ func (s *server) GetFavorites(ctx context.Context, req *catalogv1.GetFavoritesRe
 func main() {
 	ctx := context.Background()
 	
-	connStr := "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
-	db, err := storage.NewStorage(ctx, connStr, "localhost:6379")
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
+	}
+	
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+
+	db, err := storage.NewStorage(ctx, connStr, redisAddr)
 	if err != nil {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
@@ -63,8 +83,23 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
+	kafkaBroker := os.Getenv("KAFKA_BROKER")
+	if kafkaBroker == "" {
+		kafkaBroker = "localhost:9092"
+	}
+
+	kw := &kafka.Writer{
+		Addr:     kafka.TCP(kafkaBroker),
+		Topic:    "favorites_notifications",
+		Balancer: &kafka.LeastBytes{},
+	}
+	defer kw.Close()
+
 	s := grpc.NewServer()
-	catalogv1.RegisterCatalogServiceServer(s, &server{db: db})
+	catalogv1.RegisterCatalogServiceServer(s, &server{
+		db: db,
+		kafkaWriter: kw,
+	})
 
 	log.Println("Catalog Service listening on port 50052")
 	if err := s.Serve(lis); err != nil {

@@ -2,15 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
-	"fmt"
-	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
+	"os"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/roman4k-gg/myGarden/user-Service/internal/storage"
 	userv1 "github.com/roman4k-gg/myGarden/pkg/user_v1"
-	"time"
-	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 type server struct {
@@ -74,8 +76,11 @@ func (s *server) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.L
 func main() {
 
 	ctx := context.Background()
-	
-	connStr := "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
+
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
+	}
 
 	db, err := storage.NewStorage(ctx, connStr)
 

@@ -6,4 +6,5 @@ use (
     ./user-Service
     ./pkg/catalog_v1
     ./catalog-Service
+    ./notification-Service
 )
