@@ -1,10 +1,10 @@
 go 1.25.0
 
 use (
-    ./API-gateway
-    ./pkg/user_v1
-    ./user-Service
-    ./pkg/catalog_v1
-    ./catalog-Service
-    ./notification-Service
+	./API-gateway
+	./catalog-Service
+	./notification-Service
+	./pkg/catalog_v1
+	./pkg/user_v1
+	./user-Service
 )

@@ -1,6 +1,6 @@
 module github.com/roman4k-gg/myGarden/catalog-Service
 
-go 1.25.0
+go 1.24.6
 
 replace github.com/roman4k-gg/myGarden/pkg/catalog_v1 => ../pkg/catalog_v1
 

@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/grpc"
 
-	catalogv1 "github.com/roman4k-gg/myGarden/pkg/catalog_v1"
+	"github.com/roman4k-gg/myGarden/catalog-Service/internal/config"
 	"github.com/roman4k-gg/myGarden/catalog-Service/internal/storage"
+	catalogv1 "github.com/roman4k-gg/myGarden/pkg/catalog_v1"
+
+	"github.com/segmentio/kafka-go"
 )
 
 type server struct {
 	catalogv1.UnimplementedCatalogServiceServer
-	db *storage.Storage
+	db          *storage.Storage
 	kafkaWriter *kafka.Writer
 }
 
@@ -60,36 +61,26 @@ func (s *server) GetFavorites(ctx context.Context, req *catalogv1.GetFavoritesRe
 }
 
 func main() {
-	ctx := context.Background()
-	
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		connStr = "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
-	}
-	
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
 	}
 
-	db, err := storage.NewStorage(ctx, connStr, redisAddr)
+	ctx := context.Background()
+
+	db, err := storage.NewStorage(ctx, cfg.DatabaseURL, cfg.RedisAddr)
 	if err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
+		log.Fatalf("failed to connect to storage: %v", err)
 	}
 	defer db.Close()
 
-	lis, err := net.Listen("tcp", ":50052")
+	lis, err := net.Listen("tcp", cfg.GRPCPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		kafkaBroker = "localhost:9092"
-	}
-
 	kw := &kafka.Writer{
-		Addr:     kafka.TCP(kafkaBroker),
+		Addr:     kafka.TCP(cfg.KafkaBroker),
 		Topic:    "favorites_notifications",
 		Balancer: &kafka.LeastBytes{},
 	}
@@ -97,11 +88,11 @@ func main() {
 
 	s := grpc.NewServer()
 	catalogv1.RegisterCatalogServiceServer(s, &server{
-		db: db,
+		db:          db,
 		kafkaWriter: kw,
 	})
 
-	log.Println("Catalog Service listening on port 50052")
+	log.Printf("Catalog Service listening on %s", cfg.GRPCPort)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

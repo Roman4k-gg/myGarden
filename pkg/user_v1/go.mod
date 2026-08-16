@@ -1,6 +1,6 @@
 module github.com/roman4k-gg/myGarden/pkg/user_v1
 
-go 1.25.0
+go 1.24.6
 
 require (
 	google.golang.org/grpc v1.82.0

@@ -1,6 +1,6 @@
 module github.com/roman4k-gg/myGarden/notification-Service
 
-go 1.25.0
+go 1.24.6
 
 require (
 	github.com/klauspost/compress v1.15.9 // indirect

@@ -3,40 +3,34 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 
 	"github.com/segmentio/kafka-go"
+	"github.com/roman4k-gg/myGarden/notification-Service/internal/config"
 )
 
 func main() {
-	topic := "favorites_notifications"
-	
-	broker := os.Getenv("KAFKA_BROKER")
-	if broker == "" {
-		broker = "localhost:9092"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
 	}
 
 	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{broker},
-		Topic:     topic,
-		Partition: 0,
-		MinBytes:  10e3,
-		MaxBytes:  10e6,
+		Brokers:  []string{cfg.KafkaBroker},
+		Topic:    cfg.KafkaTopic,
+		GroupID:  cfg.GroupID,
+		MinBytes: 10e3,
+		MaxBytes: 10e6,
 	})
 	defer r.Close()
 
-	log.Println("Notification Service started. Listening for Kafka messages...")
+	log.Printf("Notification Service started, consuming topic=%s group=%s", cfg.KafkaTopic, cfg.GroupID)
 
 	for {
 		m, err := r.ReadMessage(context.Background())
 		if err != nil {
-			log.Printf("error while reading message: %v\n", err)
+			log.Printf("error reading message: %v", err)
 			continue
 		}
-		
-		log.Printf("========================================================\n")
-		log.Printf("[EMAIL/PUSH SIMULATION] Message received from Kafka!\n")
-		log.Printf("Topic: %s | Message: %s\n", m.Topic, string(m.Value))
-		log.Printf("========================================================\n")
+		log.Printf("[NOTIFICATION] topic=%s key=%s value=%s", m.Topic, string(m.Key), string(m.Value))
 	}
 }

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/roman4k-gg/myGarden/user-Service/internal/config"
 	"github.com/roman4k-gg/myGarden/user-Service/internal/storage"
 	userv1 "github.com/roman4k-gg/myGarden/pkg/user_v1"
 	"golang.org/x/crypto/bcrypt"
@@ -17,24 +17,23 @@ import (
 
 type server struct {
 	userv1.UnimplementedUserServiceServer
-	db *storage.Storage
+	db        *storage.Storage
+	jwtSecret []byte
 }
 
 func (s *server) Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterResponse, error) {
-	log.Printf("Получен запрос на регистрацию! Email: %s, Имя: %s", req.Email, req.Name)
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при хэшировании пароля: %w", err)
+		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 	id, err := s.db.CreateUser(ctx, req.Email, string(hashedPassword), req.Name)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при сохранении юзера в БД: %w", err)
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 	return &userv1.RegisterResponse{
-		UserId: fmt.Sprintf("%d", id), 
+		UserId: fmt.Sprintf("%d", id),
 	}, nil
 }
-
 
 func (s *server) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
 	return &userv1.GetProfileResponse{
@@ -44,28 +43,25 @@ func (s *server) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) 
 	}, nil
 }
 
-var jwtSecretKey = []byte("my-super-secret-key-change-it-later")
-
 func (s *server) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginResponse, error) {
 	user, err := s.db.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, fmt.Errorf("неверный email или пароль")
+		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
-	if err != nil {
-		return nil, fmt.Errorf("неверный email или пароль")
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		return nil, fmt.Errorf("invalid email or password")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"exp":     time.Now().Add(time.Hour * 72).Unix(),
+		"exp":     time.Now().Add(72 * time.Hour).Unix(),
 	})
 
-	tokenString, err := token.SignedString(jwtSecretKey)
+	tokenString, err := token.SignedString(s.jwtSecret)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при генерации токена")
+		return nil, fmt.Errorf("failed to sign token")
 	}
 
 	return &userv1.LoginResponse{
@@ -74,31 +70,31 @@ func (s *server) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.L
 }
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
+	}
 
 	ctx := context.Background()
 
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		connStr = "postgres://user:password@localhost:5432/mygarden_db?sslmode=disable"
-	}
-
-	db, err := storage.NewStorage(ctx, connStr)
-
+	db, err := storage.NewStorage(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("ошибка БД: %v", err)
+		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", cfg.GRPCPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	s := grpc.NewServer()
+	userv1.RegisterUserServiceServer(s, &server{
+		db:        db,
+		jwtSecret: []byte(cfg.JWTSecret),
+	})
 
-	userv1.RegisterUserServiceServer(s, &server{db: db})
-
-	log.Println("User Service запущен на порту :50051")
+	log.Printf("User Service listening on %s", cfg.GRPCPort)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
